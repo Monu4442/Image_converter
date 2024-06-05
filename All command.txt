@@ -1,0 +1,8 @@
+
+venv activate command 
+
+source venv/bin/activate
+
+generate requirements.txt
+ pip install pipreqs
+ pipreqs (execute command)
