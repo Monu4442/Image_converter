@@ -1,9 +1,8 @@
-from flask import Flask, render_template, request, flash
+from flask import Flask, render_template, request, flash, send_file
 from werkzeug.utils import secure_filename
-from PIL import Image
 import cv2
-import svgwrite
 import os
+from flask import send_from_directory
 
 UPLOAD_FOLDER = 'upload'
 ALLOWED_EXTENSIONS = {'png', 'webp', 'jpg', 'jpeg', 'gif'}
@@ -25,31 +24,23 @@ def process_image(filename, operation):
         return None
 
     new_filename = ""
+    new_file_path = ""
+    
+    # Handling different operations
     if operation == "cgray":
         img_processed = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        new_filename = f"static/{filename}"
-        cv2.imwrite(new_filename, img_processed)
-    elif operation == "cwebp":
-        new_filename = f"static/{filename.split('.')[0]}.webp"
-        cv2.imwrite(new_filename, img)
-    elif operation == "cjpg":
-        new_filename = f"static/{filename.split('.')[0]}.jpg"
-        cv2.imwrite(new_filename, img)
-    elif operation == "cpng":
-        new_filename = f"static/{filename.split('.')[0]}.png"
-        cv2.imwrite(new_filename, img)
-    elif operation == "cjpeg":
-        new_filename = f"static/{filename.split('.')[0]}.jpeg"
-        cv2.imwrite(new_filename, img)
-    elif operation == "cheic":
-        new_filename = f"static/{filename.split('.')[0]}.heic"
-        cv2.imwrite(new_filename, img)
+        new_filename = f"{filename.rsplit('.', 1)[0]}.png"
+        new_file_path = f"static/{new_filename}"
+        cv2.imwrite(new_file_path, img_processed)
+    elif operation in {"cwebp", "cjpg", "cpng", "cjpeg"}:
+        new_extension = operation[1:]
+        new_filename = f"{filename.rsplit('.', 1)[0]}.{new_extension}"
+        new_file_path = f"static/{new_filename}"
+        cv2.imwrite(new_file_path, img)
     else:
         flash('Invalid operation')
         return None
-    return new_filename
-
-
+    return new_file_path
 
 @app.route("/")
 def home():
@@ -63,25 +54,29 @@ def about():
 def edit():
     if request.method == "POST":
         operation = request.form.get("operation")
-        # check if the post request has the file part
         if 'file' not in request.files:
             flash('No file part')
-            return "error"
+            return render_template("index.html")
+        
         file = request.files['file']
-        # If the user does not select a file, the browser submits an
-        # empty file without a filename.
         if file.filename == '':
             flash('No selected file')
-            return "error no selected file"
+            return render_template("index.html")
+        
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            new = process_image(filename, operation)
-            if new:
-                flash(f"Your image has been processed and it is available to <a href='/{new}' target='_blank' style='color: blue;'>Download</a>")
-            return render_template("index.html")
-
+            new_file_path = process_image(filename, operation)
+            if new_file_path:
+                flash("Your image has been processed.")
+                return render_template("index.html", new_file_url=new_file_path)
+    
     return render_template("index.html")
 
-# if __name__ == '__main__':
-#     app.run(debug=True, port=5001)
+@app.route("/download/<filename>")
+def download_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5001)
